@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+cache/edge-1/
+cache/edge-2/
+logs/*.log
+.env
+*.zip

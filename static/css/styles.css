@@ -1,0 +1,5 @@
+/* Sample CDN-served CSS */
+body { font-family: sans-serif; margin: 0; padding: 20px; background: #f0f4f8; }
+h1 { color: #2d3748; }
+.container { max-width: 1200px; margin: 0 auto; }
+.card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
