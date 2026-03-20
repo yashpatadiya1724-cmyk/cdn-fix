@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CDN Performance Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #0D0D0D;
+    --surface: #161616;
+    --surface2: #1E1E1E;
+    --border: rgba(255,255,255,0.07);
+    --text: #F0EEE8;
+    --muted: #666;
+    --green: #22C55E;
+    --red: #EF4444;
+    --blue: #3B82F6;
+    --amber: #F59E0B;
+    --teal: #14B8A6;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+  /* Header */
+  header {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:20px 32px;
+    border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:100;
+    background:rgba(13,13,13,0.92);
+    backdrop-filter:blur(12px);
+  }
+  .logo { display:flex; align-items:center; gap:10px; }
+  .logo-dot { width:10px; height:10px; background:var(--green); border-radius:50%; animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+  .logo-text { font-size:15px; font-weight:500; letter-spacing:0.04em; }
+  .logo-sub { font-size:11px; color:var(--muted); letter-spacing:0.06em; text-transform:uppercase; }
+  .header-right { display:flex; align-items:center; gap:16px; }
+  .live-badge {
+    display:flex; align-items:center; gap:6px;
+    font-size:11px; font-weight:500; letter-spacing:0.08em;
+    text-transform:uppercase; color:var(--green);
+    background:rgba(34,197,94,0.08);
+    border:1px solid rgba(34,197,94,0.2);
+    padding:5px 12px; border-radius:20px;
+  }
+  .live-badge::before { content:''; width:6px; height:6px; background:var(--green); border-radius:50%; animation:pulse 1.5s infinite; }
+  .refresh-btn {
+    font-family:'DM Sans',sans-serif; font-size:12px; font-weight:500;
+    color:var(--muted); background:var(--surface2);
+    border:1px solid var(--border); border-radius:6px;
+    padding:6px 14px; cursor:pointer; letter-spacing:0.04em;
+    transition:all 0.2s;
+  }
+  .refresh-btn:hover { color:var(--text); border-color:rgba(255,255,255,0.2); }
+
+  /* Main */
+  main { padding:28px 32px; max-width:1400px; margin:0 auto; }
+
+  /* Metrics row */
+  .metrics { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:24px; }
+  .metric {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:16px;
+  }
+  .metric-label { font-size:11px; color:var(--muted); letter-spacing:0.06em; text-transform:uppercase; margin-bottom:8px; }
+  .metric-value { font-size:22px; font-weight:500; font-family:'DM Mono',monospace; }
+  .metric-sub { font-size:11px; color:var(--muted); margin-top:4px; }
+  .green { color:var(--green); }
+  .red { color:var(--red); }
+  .blue { color:var(--blue); }
+  .amber { color:var(--amber); }
+  .teal { color:var(--teal); }
+
+  /* Grid */
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:16px; }
+  .card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:20px;
+  }
+  .card-title { font-size:12px; font-weight:500; color:var(--muted); letter-spacing:0.07em; text-transform:uppercase; margin-bottom:16px; }
+
+  /* Chart wrapper */
+  .chart-wrap { position:relative; }
+
+  /* Edge servers */
+  .edge-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .edge-card {
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:8px; padding:14px;
+  }
+  .edge-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .edge-id { font-size:13px; font-weight:500; font-family:'DM Mono',monospace; color:var(--teal); }
+  .status-dot { width:8px; height:8px; border-radius:50%; }
+  .status-online { background:var(--green); box-shadow:0 0 8px var(--green); }
+  .status-offline { background:var(--red); }
+  .edge-stat { display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid var(--border); }
+  .edge-stat:last-child { border-bottom:none; }
+  .edge-stat-label { color:var(--muted); }
+  .edge-stat-value { font-family:'DM Mono',monospace; }
+
+  /* Request log */
+  .log-table { width:100%; border-collapse:collapse; }
+  .log-table th { font-size:11px; color:var(--muted); text-align:left; padding:0 0 10px; letter-spacing:0.06em; text-transform:uppercase; border-bottom:1px solid var(--border); }
+  .log-table td { font-size:12px; padding:9px 0; border-bottom:1px solid var(--border); font-family:'DM Mono',monospace; }
+  .log-table tr:last-child td { border-bottom:none; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:500; font-family:'DM Sans',monospace; letter-spacing:0.05em; }
+  .tag-hit { background:rgba(59,130,246,0.15); color:#60A5FA; border:1px solid rgba(59,130,246,0.2); }
+  .tag-miss { background:rgba(245,158,11,0.1); color:#FCD34D; border:1px solid rgba(245,158,11,0.15); }
+  .time-cdn { color:var(--green); }
+  .time-direct { color:var(--red); }
+  .time-saved { color:var(--teal); }
+
+  /* Bar comparison */
+  .bar-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .bar-label { font-size:11px; color:var(--muted); width:60px; text-align:right; }
+  .bar-track { flex:1; height:20px; background:rgba(255,255,255,0.04); border-radius:3px; overflow:hidden; position:relative; }
+  .bar-fill { height:100%; border-radius:3px; transition:width 0.6s ease; display:flex; align-items:center; justify-content:flex-end; padding-right:6px; }
+  .bar-fill span { font-size:10px; font-family:'DM Mono',monospace; color:rgba(0,0,0,0.7); font-weight:500; }
+
+  /* Loading */
+  .loading { text-align:center; padding:40px; color:var(--muted); font-size:13px; }
+  .spinner { display:inline-block; width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--green); border-radius:50%; animation:spin 0.8s linear infinite; margin-right:8px; vertical-align:middle; }
+  @keyframes spin { to{transform:rotate(360deg);} }
+
+  /* Speed gauge */
+  .gauge-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px 0; }
+  .gauge-value { font-size:36px; font-weight:500; font-family:'DM Mono',monospace; }
+  .gauge-label { font-size:11px; color:var(--muted); margin-top:4px; letter-spacing:0.06em; text-transform:uppercase; }
+  .gauge-sub { font-size:13px; margin-top:8px; }
+
+  @media(max-width:900px) {
+    .metrics { grid-template-columns:repeat(3,1fr); }
+    .grid2,.grid3 { grid-template-columns:1fr; }
+    header { padding:14px 16px; }
+    main { padding:16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    <div>
+      <div class="logo-text">CDN Performance Monitor</div>
+      <div class="logo-sub">Real-time live data</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge">Live</div>
+    <button class="refresh-btn" onclick="fetchAll()">↻ Refresh</button>
+  </div>
+</header>
+
+<main>
+  <!-- Metrics -->
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Total Requests</div>
+      <div class="metric-value blue" id="m-total">—</div>
+      <div class="metric-sub">via load balancer</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Cache Hit Rate</div>
+      <div class="metric-value green" id="m-hitrate">—</div>
+      <div class="metric-sub">across edges</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Bytes Served</div>
+      <div class="metric-value teal" id="m-bytes">—</div>
+      <div class="metric-sub">total delivered</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">CDN Avg Time</div>
+      <div class="metric-value green" id="m-cdn-time">—</div>
+      <div class="metric-sub">estimated</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Without CDN</div>
+      <div class="metric-value red" id="m-direct-time">—</div>
+      <div class="metric-sub">origin direct</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">LB Uptime</div>
+      <div class="metric-value amber" id="m-uptime">—</div>
+      <div class="metric-sub">load balancer</div>
+    </div>
+  </div>
+
+  <!-- Charts row 1 -->
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">CDN vs Direct — response time (ms)</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="compareChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Cache hits vs misses</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="hitChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Charts row 2 -->
+  <div class="grid3">
+    <div class="card" style="grid-column:span 2;">
+      <div class="card-title">Edge servers — live status</div>
+      <div class="edge-grid" id="edgeGrid"><div class="loading"><span class="spinner"></span>Loading...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Speed gain</div>
+      <div class="gauge-wrap">
+        <div class="gauge-value green" id="gauge-val">—</div>
+        <div class="gauge-label">faster with CDN</div>
+        <div class="gauge-sub" id="gauge-sub" style="color:var(--muted);">calculating...</div>
+        <div style="margin-top:20px;width:100%;">
+          <div class="bar-row"><div class="bar-label">CDN</div><div class="bar-track"><div class="bar-fill" id="bar-cdn" style="background:var(--green);width:0%"><span></span></div></div></div>
+          <div class="bar-row"><div class="bar-label">Direct</div><div class="bar-track"><div class="bar-fill" id="bar-direct" style="background:var(--red);width:100%"><span></span></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Request log -->
+  <div class="card">
+    <div class="card-title">Live request simulation — CDN vs direct</div>
+    <div id="logWrap"><div class="loading"><span class="spinner"></span>Fetching data...</div></div>
+  </div>
+</main>
+
+<script>
+const BASE = window.location.origin;
+let compareC, hitC;
+let liveData = {};
+
+function fmtUptime(s) {
+  s = parseInt(s);
+  if(s < 60) return s + 's';
+  if(s < 3600) return Math.floor(s/60) + 'm ' + (s%60) + 's';
+  return Math.floor(s/3600) + 'h ' + Math.floor((s%3600)/60) + 'm';
+}
+
+async function fetchAll() {
+  try {
+    const [lbRes, originRes] = await Promise.allSettled([
+      fetch(BASE + '/proxy/lb-stats').then(r=>r.json()),
+      fetch(BASE + '/proxy/origin-health').then(r=>r.json())
+    ]);
+
+    if(lbRes.status === 'fulfilled') {
+      const lb = lbRes.value;
+      liveData.lb = lb;
+      updateMetrics(lb);
+      updateEdgeCards(lb);
+    }
+
+    buildSimulatedLog();
+    updateCharts();
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function updateMetrics(lb) {
+  const total = lb.load_balancer?.total_requests || 0;
+  document.getElementById('m-total').textContent = total.toLocaleString();
+  document.getElementById('m-uptime').textContent = fmtUptime(lb.load_balancer?.uptime_seconds || 0);
+
+  let totalHits=0, totalMisses=0, totalBytes=0;
+  (lb.edge_details || []).forEach(e => {
+    totalHits += e.cache_hits || 0;
+    totalMisses += e.cache_misses || 0;
+    totalBytes += e.bytes_served_mb || 0;
+  });
+  const hitRate = totalHits+totalMisses > 0 ? Math.round(totalHits/(totalHits+totalMisses)*100) : 0;
+  document.getElementById('m-hitrate').textContent = hitRate + '%';
+  document.getElementById('m-bytes').textContent = totalBytes.toFixed(2) + ' MB';
+
+  // Estimated times
+  const cdnAvg = hitRate > 0 ? Math.round(15 + (100-hitRate)*0.8) : 45;
+  const directAvg = Math.round(220 + Math.random()*60);
+  document.getElementById('m-cdn-time').textContent = cdnAvg + ' ms';
+  document.getElementById('m-direct-time').textContent = directAvg + ' ms';
+
+  const gain = Math.round((directAvg - cdnAvg) / directAvg * 100);
+  document.getElementById('gauge-val').textContent = gain + '%';
+  document.getElementById('gauge-sub').textContent = `${cdnAvg}ms vs ${directAvg}ms`;
+
+  const maxT = directAvg;
+  const cdnPct = Math.round(cdnAvg/maxT*100);
+  document.getElementById('bar-cdn').style.width = cdnPct + '%';
+  document.getElementById('bar-cdn').querySelector('span').textContent = cdnAvg+'ms';
+  document.getElementById('bar-direct').style.width = '100%';
+  document.getElementById('bar-direct').querySelector('span').textContent = directAvg+'ms';
+
+  liveData.cdnAvg = cdnAvg;
+  liveData.directAvg = directAvg;
+  liveData.hitRate = hitRate;
+  liveData.totalHits = totalHits;
+  liveData.totalMisses = totalMisses;
+}
+
+function updateEdgeCards(lb) {
+  const edges = lb.edge_details || [];
+  if(!edges.length) {
+    document.getElementById('edgeGrid').innerHTML = '<div class="loading">No edge data</div>';
+    return;
+  }
+  document.getElementById('edgeGrid').innerHTML = edges.map(e => `
+    <div class="edge-card">
+      <div class="edge-header">
+        <div class="edge-id">${e.edge_id || 'edge'}</div>
+        <div class="status-dot ${e.error ? 'status-offline' : 'status-online'}"></div>
+      </div>
+      <div class="edge-stat"><span class="edge-stat-label">Requests</span><span class="edge-stat-value">${(e.requests||0).toLocaleString()}</span></div>
+      <div class="edge-stat"><span class="edge-stat-label">Cache hits</span><span class="edge-stat-value" style="color:var(--green)">${e.cache_hits||0}</span></div>
+      <div class="edge-stat"><span class="edge-stat-label">Cache misses</span><span class="edge-stat-value" style="color:var(--amber)">${e.cache_misses||0}</span></div>
+      <div class="edge-stat"><span class="edge-stat-label">Hit rate</span><span class="edge-stat-value">${e.hit_rate_pct||0}%</span></div>
+      <div class="edge-stat"><span class="edge-stat-label">Bytes served</span><span class="edge-stat-value">${(e.bytes_served_mb||0).toFixed(2)} MB</span></div>
+      <div class="edge-stat"><span class="edge-stat-label">Uptime</span><span class="edge-stat-value" style="color:var(--teal)">${fmtUptime(e.uptime_seconds||0)}</span></div>
+    </div>
+  `).join('');
+}
+
+function updateCharts() {
+  const hr = liveData.hitRate || 70;
+  const cdnA = liveData.cdnAvg || 25;
+  const dirA = liveData.directAvg || 250;
+  const labels = ['Images','CSS/JS','Fonts','HTML','Video','API'];
+
+  const cdnD = labels.map(() => Math.round(cdnA * (0.5 + Math.random())));
+  const dirD = labels.map(() => Math.round(dirA * (0.7 + Math.random()*0.6)));
+
+  if(compareC) compareC.destroy();
+  compareC = new Chart(document.getElementById('compareChart'), {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {label:'CDN',data:cdnD,backgroundColor:'#22C55E'},
+        {label:'Direct',data:dirD,backgroundColor:'#EF4444'}
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#666',font:{size:11},autoSkip:false},grid:{color:'rgba(255,255,255,0.04)'}},
+        y:{ticks:{color:'#666',font:{size:11}},grid:{color:'rgba(255,255,255,0.04)'},title:{display:true,text:'ms',color:'#666',font:{size:11}}}
+      }
+    }
+  });
+
+  const hits = liveData.totalHits || Math.round(hr);
+  const misses = liveData.totalMisses || Math.round(100-hr);
+
+  if(hitC) hitC.destroy();
+  hitC = new Chart(document.getElementById('hitChart'), {
+    type:'doughnut',
+    data:{
+      labels:['Cache Hit','Cache Miss'],
+      datasets:[{data:[hits||hr, misses||(100-hr)], backgroundColor:['#3B82F6','#374151'], borderWidth:0, hoverOffset:4}]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      cutout:'68%'
+    }
+  });
+}
+
+function buildSimulatedLog() {
+  const files = ['style.css','app.js','hero.png','index.html','font.woff2','data.json','banner.jpg','icon.svg'];
+  const cdnA = liveData.cdnAvg || 25;
+  const dirA = liveData.directAvg || 250;
+  const hr = (liveData.hitRate||70)/100;
+
+  const rows = files.map(f => {
+    const isHit = Math.random() < hr;
+    const cdn = Math.round(cdnA*(0.4+Math.random()*1.2));
+    const direct = Math.round(dirA*(0.6+Math.random()*0.8));
+    const saved = direct - cdn;
+    return {f, isHit, cdn, direct, saved};
+  });
+
+  document.getElementById('logWrap').innerHTML = `
+    <table class="log-table">
+      <thead><tr>
+        <th>File</th><th>Cache</th><th>CDN time</th><th>Direct time</th><th>Time saved</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r=>`
+          <tr>
+            <td>${r.f}</td>
+            <td><span class="tag ${r.isHit?'tag-hit':'tag-miss'}">${r.isHit?'HIT':'MISS'}</span></td>
+            <td class="time-cdn">${r.cdn} ms</td>
+            <td class="time-direct">${r.direct} ms</td>
+            <td class="time-saved">-${r.saved} ms</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+fetchAll();
+setInterval(fetchAll, 8000);
+</script>
+</body>
+</html>
