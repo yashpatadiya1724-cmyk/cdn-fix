@@ -4,10 +4,8 @@ Serves the CDN monitoring dashboard on port 8090.
 """
 
 import sys
-import os
 import time
 import logging
-import argparse
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -29,7 +27,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 async def proxy_lb_stats():
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get("http://127.0.0.1:8081/stats")
+            r = await client.get("http://127.0.0.1:8080/stats")
             return r.json()
     except Exception as e:
         return {"error": str(e)}
@@ -56,26 +54,10 @@ async def proxy_origin_logs():
 async def proxy_clear_cache():
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.delete("http://127.0.0.1:8081/cache")
+            r = await client.delete("http://127.0.0.1:8080/cache")
             return r.json()
     except Exception as e:
         return {"error": str(e)}
-
-@app.get("/cdn/{file_path:path}")
-async def proxy_cdn(file_path: str, request: Request):
-    from fastapi.responses import Response
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            r = await client.get(f"http://127.0.0.1:8081/cdn/{file_path}")
-            return Response(
-                content=r.content,
-                status_code=r.status_code,
-                media_type=r.headers.get("content-type", "application/octet-stream"),
-                headers={"X-CDN-Proxy": "dashboard"},
-            )
-    except Exception as e:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=503, detail=f"CDN unavailable: {e}")
 
 DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en">
@@ -790,8 +772,5 @@ async def dashboard():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", 8090)))
-    args, _ = parser.parse_known_args()
-    logger.info(f"Starting Dashboard on port {args.port}")
-    uvicorn.run("backend.dashboard:app", host="0.0.0.0", port=args.port, reload=False)
+    logger.info("Starting Dashboard on port 8090")
+    uvicorn.run("dashboard:app", host="0.0.0.0", port=8090, reload=False)
